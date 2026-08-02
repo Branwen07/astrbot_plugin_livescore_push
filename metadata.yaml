@@ -15,7 +15,7 @@ help: |
   /球 帮助        —— 查看帮助
 version: v1.0.0
 author: Branwen
-repo: https://github.com/
+repo: https://github.com/Branwen07/astrbot_plugin_livescore_push.git
 astrbot_version: ">=4.16,<5"
 support_platforms:
   - aiocqhttp

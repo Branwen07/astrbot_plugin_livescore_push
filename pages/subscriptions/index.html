@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #fafafa;
+    --fg: #1a1a1a;
+    --muted: #8a8a8a;
+    --line: #e6e6e6;
+    --chip-bg: #f0f0f0;
+    --accent: #111;
+    --accent-fg: #fff;
+    --danger: #b3261e;
+    --ok: #1f7a3d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414;
+      --fg: #e8e8e8;
+      --muted: #8f8f8f;
+      --line: #2a2a2a;
+      --chip-bg: #222;
+      --accent: #e8e8e8;
+      --accent-fg: #141414;
+      --danger: #f0837a;
+      --ok: #7bc492;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.6;
+    padding: 44px 36px 64px; max-width: 760px; margin: 0 auto;
+  }
+  .head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  h1 { font-size: 22px; font-weight: 650; letter-spacing: 0.01em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .stats {
+    display: flex; gap: 56px; margin: 30px 0 0;
+    padding: 22px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  }
+  .stat .num { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .stat .lbl { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .session { padding: 24px 0; border-bottom: 1px solid var(--line); }
+  .session:last-child { border-bottom: none; }
+  .s-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .s-name { font-size: 15px; font-weight: 600; }
+  .s-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 1px 9px; border-radius: 999px; }
+  .s-id { font-size: 11px; color: var(--muted); font-family: ui-monospace, "SF Mono", Consolas, monospace; word-break: break-all; flex-basis: 100%; }
+  .s-add {
+    margin-left: auto; font-size: 12px; color: var(--muted);
+    background: none; border: 1px solid var(--line); border-radius: 999px;
+    padding: 3px 14px; cursor: pointer; transition: all .15s;
+  }
+  .s-add:hover { color: var(--accent); border-color: var(--accent); }
+
+  .items { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--chip-bg); border: 1px solid var(--line);
+    border-radius: 999px; font-size: 13px; overflow: hidden;
+  }
+  .chip .t { font-size: 11px; color: var(--muted); border-right: 1px solid var(--line); padding: 4px 0 4px 12px; }
+  .chip .n { padding: 4px 2px 4px 8px; }
+  .chip .x {
+    border: none; background: none; cursor: pointer; color: var(--muted);
+    font-size: 13px; line-height: 1; padding: 4px 10px 4px 6px;
+    transition: color .15s;
+  }
+  .chip .x:hover { color: var(--danger); }
+  .chip.confirm { border-color: var(--danger); }
+  .chip.confirm .x { color: var(--danger); font-size: 11px; padding-left: 2px; }
+
+  .addform {
+    margin-top: 14px; display: none; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding-top: 14px; border-top: 1px dashed var(--line);
+  }
+  .addform.show { display: flex; }
+  .addform select, .addform input {
+    font: inherit; font-size: 13px; color: var(--fg);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 6px 10px; outline: none;
+  }
+  .addform select:focus, .addform input:focus { border-color: var(--accent); }
+  .addform input { flex: 1; min-width: 160px; }
+  .btn {
+    font-size: 13px; border-radius: 999px; padding: 6px 18px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .75; }
+  .btn-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .add-hint { width: 100%; color: var(--muted); font-size: 11px; }
+
+  .empty { padding: 64px 0; text-align: center; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .empty .big { font-size: 15px; color: var(--fg); margin-bottom: 6px; }
+  .err { color: var(--danger); padding: 40px 0; text-align: center; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 24px; text-align: center; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(12px);
+    background: var(--accent); color: var(--accent-fg); font-size: 13px;
+    padding: 8px 20px; border-radius: 999px; opacity: 0; pointer-events: none;
+    transition: opacity .2s, transform .2s; max-width: 90%; z-index: 9;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div>
+      <h1>订阅总览</h1>
+      <div class="sub">各对话订阅的联赛 / 球队推送 · 可在此直接添加与取消</div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="num" id="nSubs">–</div><div class="lbl">订阅条目</div></div>
+    <div class="stat"><div class="num" id="nSessions">–</div><div class="lbl">会话数</div></div>
+  </div>
+
+  <div id="list"></div>
+  <div class="meta" id="meta"></div>
+  <div id="toast"></div>
+
+  <script src="/api/plugin/page/bridge-sdk.js"></script>
+  <script>
+    (function () {
+      var TYPE_ZH = { league: "联赛", team: "球队" };
+      var listEl = document.getElementById("list");
+      var metaEl = document.getElementById("meta");
+      var toastEl = document.getElementById("toast");
+      var toastTimer = null;
+      var confirmTimer = null;
+      var confirmChip = null;
+
+      function esc(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+      }
+      function toast(msg, ok) {
+        toastEl.textContent = (ok === false ? "⚠ " : "") + msg;
+        toastEl.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2600);
+      }
+      function post(endpoint, body) {
+        return window.AstrBotPluginPage.apiPost(endpoint, body);
+      }
+
+      function confirmRemove(sid, stype, name, chipEl) {
+        if (confirmChip === chipEl) {
+          clearTimeout(confirmTimer);
+          confirmChip = null;
+          post("subs/remove", { session: sid, type: stype, name: name })
+            .then(function (r) {
+              if (r && r.ok) { toast(r.message, true); load(); }
+              else { toast((r && r.message) || "取消失败", false); }
+            })
+            .catch(function (e) { toast("请求失败：" + (e && e.message || e), false); });
+          return;
+        }
+        confirmChip = chipEl;
+        chipEl.classList.add("confirm");
+        var x = chipEl.querySelector(".x");
+        x.textContent = "确认取消";
+        clearTimeout(confirmTimer);
+        confirmTimer = setTimeout(function () {
+          chipEl.classList.remove("confirm");
+          x.textContent = "×";
+          if (confirmChip === chipEl) confirmChip = null;
+        }, 3000);
+      }
+
+      function toggleForm(sid, btn) {
+        var form = document.getElementById("form-" + sid);
+        if (!form) return;
+        var show = !form.classList.contains("show");
+        document.querySelectorAll(".addform.show").forEach(function (f) { f.classList.remove("show"); });
+        if (show) {
+          form.classList.add("show");
+          form.querySelector("input").focus();
+        }
+      }
+
+      function doAdd(sid, form) {
+        var type = form.querySelector("select").value;
+        var name = form.querySelector("input").value.trim();
+        if (!name) { toast("请输入名称", false); return; }
+        post("subs/add", { session: sid, type: type, name: name })
+          .then(function (r) {
+            if (r && r.ok) {
+              toast(r.message, true);
+              form.classList.remove("show");
+              form.querySelector("input").value = "";
+              load();
+            } else {
+              toast((r && r.message) || "添加失败", false);
+            }
+          })
+          .catch(function (e) { toast("请求失败：" + (e && e.message || e), false); });
+      }
+
+      function render(data) {
+        var subs = (data && data.subs) || [];
+        var meta = (data && data.session_meta) || {};
+        var bySession = {};
+        subs.forEach(function (s) {
+          (s.sessions || []).forEach(function (sid) {
+            if (!bySession[sid]) bySession[sid] = [];
+            bySession[sid].push(s);
+          });
+        });
+        var sessionIds = Object.keys(bySession);
+        document.getElementById("nSubs").textContent = subs.length;
+        document.getElementById("nSessions").textContent = sessionIds.length;
+
+        var html = "";
+        if (!sessionIds.length) {
+          html += '<div class="empty"><div class="big">还没有任何订阅</div>' +
+            '请在会话中发送 <code>/球 关注 英超</code> 或 <code>/球 关注 拜仁慕尼黑</code> 建立第一个会话</div>';
+        } else {
+          sessionIds.forEach(function (sid) {
+            var m = meta[sid] || {};
+            var name = [m.platform, m.sender].filter(Boolean).join(" · ") || "未知会话";
+            var items = bySession[sid].map(function (s) {
+              return '<span class="chip" id="chip-' + esc(s.type) + '-' + esc(s.name) + '">' +
+                '<span class="t">' + esc(TYPE_ZH[s.type] || s.type) + "</span>" +
+                '<span class="n">' + esc(s.name) + "</span>" +
+                '<button class="x" data-sid="' + esc(sid) + '" data-type="' + esc(s.type) +
+                '" data-name="' + esc(s.name) + '">×</button></span>';
+            }).join("");
+            html += '<div class="session" id="session-' + esc(sid) + '">' +
+              '<div class="s-head"><span class="s-name">' + esc(name) + "</span>" +
+              (m.last_seen ? '<span class="s-tag">最近活跃 ' + esc(m.last_seen) + "</span>" : "") +
+              '<button class="s-add" data-sid="' + esc(sid) + '">+ 添加订阅</button>' +
+              '</div><div class="s-id">' + esc(sid) + "</div>" +
+              '<div class="items">' + items + "</div>" +
+              '<div class="addform" id="form-' + esc(sid) + '">' +
+              '<select><option value="league">联赛</option><option value="team">球队</option></select>' +
+              '<input placeholder="如：英超 / 拜仁慕尼黑" maxlength="40">' +
+              '<button class="btn btn-primary" data-act="ok">添加</button>' +
+              '<button class="btn" data-act="cancel">取消</button>' +
+              '<div class="add-hint">球队名称需与推送消息一致；联赛支持中文别名（英超、西甲、欧冠…）</div>' +
+              "</div></div>";
+          });
+        }
+        listEl.innerHTML = html;
+        metaEl.textContent = sessionIds.length
+          ? "共 " + sessionIds.length + " 个会话 · " + subs.length + " 个订阅条目"
+          : "";
+
+        // 绑定事件
+        listEl.querySelectorAll(".x").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var chip = btn.closest(".chip");
+            confirmRemove(btn.dataset.sid, btn.dataset.type, btn.dataset.name, chip);
+          });
+        });
+        listEl.querySelectorAll(".s-add").forEach(function (btn) {
+          btn.addEventListener("click", function () { toggleForm(btn.dataset.sid, btn); });
+        });
+        listEl.querySelectorAll(".addform").forEach(function (form) {
+          form.querySelector('[data-act="ok"]').addEventListener("click", function () {
+            doAdd(form.id.replace("form-", ""), form);
+          });
+          form.querySelector('[data-act="cancel"]').addEventListener("click", function () {
+            form.classList.remove("show");
+          });
+          form.querySelector("input").addEventListener("keydown", function (e) {
+            if (e.key === "Enter") doAdd(form.id.replace("form-", ""), form);
+          });
+        });
+      }
+
+      function fail(err) {
+        listEl.innerHTML = '<div class="err">加载失败：' + esc(err && err.message ? err.message : err) + "</div>";
+      }
+      function load() {
+        window.AstrBotPluginPage.apiGet("subs").then(render).catch(fail);
+      }
+      window.AstrBotPluginPage.ready().then(load);
+    })();
+  </script>
+</body>
+</html>

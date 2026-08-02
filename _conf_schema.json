@@ -1,0 +1,28 @@
+{
+  "push_goal": {
+    "type": "bool",
+    "description": "进球时推送",
+    "default": true
+  },
+  "push_start": {
+    "type": "bool",
+    "description": "开赛时推送",
+    "default": true
+  },
+  "push_finish": {
+    "type": "bool",
+    "description": "完场时推送",
+    "default": true
+  },
+  "daily_schedule": {
+    "type": "bool",
+    "description": "每天早上 8 点推送当日关注赛程",
+    "default": true
+  },
+  "remind_minutes": {
+    "type": "int",
+    "description": "开赛前提醒分钟数（0 为关闭）",
+    "hint": "例如填 30，表示关注比赛开赛前 30 分钟推送提醒",
+    "default": 0
+  }
+}

@@ -16,20 +16,6 @@ except ImportError:  # 兼容旧版本
 
 MCP_SERVER = "Live-Score"
 
-# 常见中文联赛名 → 匹配关键词（匹配 leagueKey / leaguename，小写）
-LEAGUE_ALIASES = {
-    "英超": ["premier league", "englandpremierleague"],
-    "西甲": ["la liga", "laliga", "spainlaliga", "primera division"],
-    "德甲": ["bundesliga", "germanybundesliga"],
-    "意甲": ["serie a", "italyseriea"],
-    "法甲": ["ligue 1", "franceligue1"],
-    "欧冠": ["champions league", "europeuefachampionsleague"],
-    "欧联": ["europa league", "europeuefaeuropaleague"],
-    "中超": ["super league", "chinasuperleague"],
-    "日职": ["j1 league", "japanj1"],
-    "韩职": ["k league", "koreakleague"],
-}
-
 STATUS_ZH = {
     "FT": "完场",
     "HT": "半场",
@@ -40,11 +26,82 @@ STATUS_ZH = {
     "CANC": "取消",
 }
 
+# 中文球队名 → 匹配关键词（Live-Score 返回英文队名，需中英对照）
+TEAM_ALIASES = {
+    # 中超 2026（官方英文名来自 get_league_fixtures("ChinaCSL")）
+    "北京国安": ["beijing guoan"],
+    "成都蓉城": ["chengdu rongcheng"],
+    "重庆铜梁龙": ["chongqing tongliang long"],
+    "大连英博": ["dalian yingbo"],
+    "辽宁铁人": ["liaoning shenyang urban", "liaoning"],
+    "辽宁沈阳城市": ["liaoning shenyang urban"],
+    "青岛海牛": ["qingdao hainiu"],
+    "青岛西海岸": ["qingdao west coast"],
+    "山东泰山": ["shandong taishan"],
+    "上海海港": ["shanghai port"],
+    "上海申花": ["shanghai shenhua"],
+    "四川九牛": ["sichuan jiuniu"],
+    "天津津门虎": ["tianjin jinmen tiger"],
+    "武汉三镇": ["wuhan three towns"],
+    "云南玉昆": ["yunnan yukun"],
+    "浙江队": ["zhejiang"],
+    "浙江": ["zhejiang"],
+    "河南队": ["henan"],
+    "河南": ["henan"],
+    # 主流欧洲 / 亚洲豪门
+    "曼城": ["manchester city", "man city"],
+    "曼联": ["manchester united", "man united"],
+    "利物浦": ["liverpool"],
+    "阿森纳": ["arsenal"],
+    "切尔西": ["chelsea"],
+    "热刺": ["tottenham"],
+    "皇马": ["real madrid"],
+    "皇家马德里": ["real madrid"],
+    "巴萨": ["barcelona"],
+    "巴塞罗那": ["barcelona"],
+    "拜仁": ["bayern"],
+    "拜仁慕尼黑": ["bayern munich"],
+    "多特": ["dortmund"],
+    "巴黎": ["paris saint germain", "paris"],
+    "尤文": ["juventus"],
+    "国米": ["inter milan", "inter"],
+    "国际米兰": ["inter milan"],
+    "ac米兰": ["ac milan"],
+    "马竞": ["atletico madrid"],
+    "那不勒斯": ["napoli"],
+    "罗马": ["roma"],
+    "本菲卡": ["benfica"],
+    "波尔图": ["porto"],
+    "阿贾克斯": ["ajax"],
+    "费耶诺德": ["feyenoord"],
+    "埃因霍温": ["psv"],
+    "凯尔特人": ["celtic"],
+    "浦和红钻": ["urawa"],
+    "横滨水手": ["yokohama"],
+    "川崎前锋": ["kawasaki"],
+    "全北现代": ["jeonbuk"],
+    "蔚山现代": ["ulsan"],
+    "利雅得胜利": ["al nassr"],
+    "利雅得新月": ["al hilal"],
+    "迈阿密国际": ["inter miami"],
+}
+
+# 正式结束状态（含加时赛 AET、点球大战 PEN）
+FINISH_STATUS = {"FT", "AET", "PEN"}
+
+# 动态任务命名（按比赛 ID 区分）
+JOB_DAILY = "livescore_daily"
+JOB_REMIND_PREFIX = "livescore_remind_"
+JOB_POLL_PREFIX = "livescore_poll_"
+
+# 轮询任务提前开始时间（分钟）：开赛前 5 分钟即开始轮询，确保推送"开赛"
+POLL_LEAD_MINUTES = 5
+
 
 @register(
     "astrbot_plugin_livescore_push",
     "Branwen",
-    "基于 Live-Score MCP 的足球比赛实时推送插件：订阅联赛/球队，进球、开赛、完场即时推送到群/私聊，并支持每日赛程与开赛前提醒。",
+    "基于 Live-Score MCP 的足球比赛实时推送插件：关注球队，进球、开赛、完场即时推送到群/私聊，并支持每日赛程与开赛前提醒。",
     "1.0.0",
     "https://github.com/",
 )
@@ -57,8 +114,13 @@ class LiveScorePush(Star):
         os.makedirs(self.data_dir, exist_ok=True)
         self.subs_file = os.path.join(self.data_dir, "subscriptions.json")
         self.state_file = os.path.join(self.data_dir, "state.json")
-        self._subs = self._load_json(self.subs_file, [])
+        # 仅保留球队订阅（历史联赛订阅数据已弃用，启动时清理）
+        _old_subs = self._load_json(self.subs_file, [])
+        self._subs = [s for s in _old_subs if s.get("type") == "team" and s.get("name")]
+        if self._subs != _old_subs:
+            self._save_json(self.subs_file, self._subs)
         self._state = self._load_json(self.state_file, {})
+        self._poll_lock = asyncio.Lock()
         self.session_meta_file = os.path.join(self.data_dir, "session_meta.json")
         self._session_meta = self._load_json(self.session_meta_file, {})
         self._cron_ok = False
@@ -68,7 +130,7 @@ class LiveScorePush(Star):
                 "/astrbot_plugin_livescore_push/subs",
                 self.web_subs_overview,
                 ["GET"],
-                "订阅概览：查看各会话订阅的联赛/球队",
+                "订阅概览：查看各会话关注的球队",
             )
             self.context.register_web_api(
                 "/astrbot_plugin_livescore_push/subs/add",
@@ -143,34 +205,20 @@ class LiveScorePush(Star):
 
     # ==================== 订阅匹配 ====================
 
-    @classmethod
-    def _expand_name(cls, name: str) -> list[str]:
-        name = name.strip().lower()
-        kws = [name]
-        if name in LEAGUE_ALIASES:
-            kws += LEAGUE_ALIASES[name]
-        return [k for k in kws if k]
-
-    def _league_hit(self, match: dict, league: dict, sub_name: str) -> bool:
-        key = (match.get("leagueKey") or league.get("key") or "").lower()
-        name = (match.get("leaguename") or league.get("league") or "").lower()
-        return any(kw in key or kw in name for kw in self._expand_name(sub_name))
-
     def _team_hit(self, match: dict, sub_name: str) -> bool:
         kw = sub_name.strip().lower()
         if not kw:
             return False
+        kws = [kw] + TEAM_ALIASES.get(kw, [])
         local = (match.get("localteam") or "").lower()
         visitor = (match.get("visitorteam") or "").lower()
-        return kw in local or kw in visitor
+        return any(k in local or k in visitor for k in kws)
 
     def _watched_subs(self, match: dict, league: dict) -> list[dict]:
         hits = []
         for s in self._subs:
             try:
-                if s["type"] == "league" and self._league_hit(match, league, s["name"]):
-                    hits.append(s)
-                elif s["type"] == "team" and self._team_hit(match, s["name"]):
+                if s["type"] == "team" and self._team_hit(match, s["name"]):
                     hits.append(s)
             except Exception:
                 continue
@@ -196,77 +244,185 @@ class LiveScorePush(Star):
         try:
             cm = self.context.cron_manager
             jobs = await cm.list_jobs()
-            names = {getattr(j, "name", "") for j in jobs}
-            if "livescore_poll" not in names:
-                await cm.add_basic_job(
-                    name="livescore_poll",
-                    cron_expression="*/1 * * * *",
-                    handler=self.poll_live,
-                    description="足球实时比分轮询（进球/开赛/完场推送）",
-                )
-            if self.config.get("daily_schedule", True) and "livescore_daily" not in names:
-                await cm.add_basic_job(
-                    name="livescore_daily",
-                    cron_expression="0 8 * * *",
-                    handler=self.daily_schedule,
-                    description="每日 8 点推送关注赛程",
-                )
-            remind = int(self.config.get("remind_minutes", 0) or 0)
-            if remind > 0 and "livescore_remind" not in names:
-                await cm.add_basic_job(
-                    name="livescore_remind",
-                    cron_expression="*/5 * * * *",
-                    handler=self.remind_check,
-                    description="开赛前提醒",
-                )
+            # 删除本插件全部旧任务（固定 daily + 动态 remind_/poll_），重建。
+            # 旧任务记录残留在 DB（persistent=False 不参与重启调度），
+            # 若仅按 name 去重会跳过注册，导致 handler 注册表缺失、
+            # 定时任务不再执行、面板"立即执行"报 handler not found。
+            for j in jobs:
+                name = getattr(j, "name", "")
+                if name == JOB_DAILY or name.startswith((JOB_REMIND_PREFIX, JOB_POLL_PREFIX)):
+                    try:
+                        await cm.delete_job(j.job_id)
+                    except Exception as e:
+                        logger.warning(f"清理旧任务 {name} 失败: {e}")
+            # 固定任务：每日 8 点，发现关注比赛后动态调度提醒/轮询任务
+            await cm.add_basic_job(
+                name=JOB_DAILY,
+                cron_expression="0 8 * * *",
+                handler=self.daily_schedule,
+                description="每日 8 点查询订阅球队当日赛程并调度开赛提醒/轮询任务",
+            )
+            # 恢复动态任务（插件重载后 remind_/poll_ 已随上面清理）
+            await self._schedule_today_tasks()
             self._cron_ok = True
-            logger.info("Live-Score 推送定时任务已注册。")
+            logger.info("Live-Score 定时任务已注册（daily + 动态恢复）。")
         except Exception as e:
             logger.error(f"定时任务注册失败: {e}")
 
-    # ---- 核心轮询：每分钟一次 ----
-    async def poll_live(self) -> None:
-        if not self._subs:
+    # ---- 动态任务管理 ----
+    async def _job_exists(self, name: str) -> bool:
+        try:
+            cm = self.context.cron_manager
+            jobs = await cm.list_jobs("basic")
+            return any(getattr(j, "name", "") == name for j in jobs)
+        except Exception:
+            return False
+
+    async def _remove_job_by_name(self, name: str) -> None:
+        try:
+            cm = self.context.cron_manager
+            jobs = await cm.list_jobs("basic")
+            for j in jobs:
+                if getattr(j, "name", "") == name:
+                    await cm.delete_job(j.job_id)
+        except Exception as e:
+            logger.warning(f"删除任务 {name} 失败: {e}")
+
+    async def _add_remind_job(self, m: dict, remind_at) -> None:
+        """注册一次性开赛提醒任务（到点执行后自动删除）。"""
+        mid = m.get("mid", "")
+        name = f"{JOB_REMIND_PREFIX}{mid}"
+        if await self._job_exists(name):
             return
-        data = await self._mcp("get_live_scores")
-        if not data:
+        cm = self.context.cron_manager
+        job = await cm.add_basic_job(
+            name=name,
+            cron_expression="0 0 * * *",  # 占位，随后改为一次性触发
+            handler=self.remind_check,
+            payload={"mid": mid},
+            description=f"开赛提醒 {m.get('local')} vs {m.get('visitor')}",
+            persistent=False,
+        )
+        await cm.update_job(job.job_id, run_once=True, cron_expression=remind_at.isoformat())
+
+    async def _add_poll_job(self, m: dict) -> None:
+        """注册每分钟轮询任务（开赛前 POLL_LEAD_MINUTES 分钟开始生效，完场后删除）。"""
+        mid = m.get("mid", "")
+        name = f"{JOB_POLL_PREFIX}{mid}"
+        if await self._job_exists(name):
             return
-        live_ids: set[str] = set()
-        for country in data:
-            for lg in country.get("leagues", []):
-                for m in lg.get("matches", []):
-                    mid = str(m.get("id", ""))
-                    if not mid:
-                        continue
-                    live_ids.add(mid)
-                    subs = self._watched_subs(m, lg)
-                    if subs:
-                        await self._process_live_match(m, lg, subs)
-        # 完场检测：关注比赛从直播列表消失 → 拉详情确认 FT
-        for mid, st in list(self._state.items()):
-            if mid in live_ids or not st.get("score") or st.get("pushed_finish"):
+        cm = self.context.cron_manager
+        await cm.add_basic_job(
+            name=name,
+            cron_expression="*/1 * * * *",
+            handler=self.poll_match,
+            payload={"mid": mid},
+            description=f"比赛轮询推送 {m.get('local')} vs {m.get('visitor')}",
+            persistent=False,
+        )
+
+    async def _schedule_today_tasks(self) -> None:
+        """为今日每场关注比赛安排动态任务：未开赛→一次性提醒，已开赛→轮询。"""
+        cached = self._state.get("today") or {}
+        matches = cached.get("matches", [])
+        now = datetime.now()
+        today_key = now.strftime("%Y-%m-%d")
+        mins = int(self.config.get("remind_minutes", 0) or 0)
+        for m in matches:
+            if m.get("finished") or not m.get("mid"):
                 continue
-            detail = await self._mcp("get_match", id=mid, h2h=0)
-            if detail and str(detail.get("status", "")) == "FT":
+            kickoff = self._kickoff_local(m, today_key)
+            if kickoff and kickoff > now and not m.get("remind_done"):
+                # 未开赛：注册一次性提醒（开赛前 mins 分钟）
+                if mins > 0:
+                    remind_at = kickoff - timedelta(minutes=mins)
+                    if remind_at > now:
+                        await self._add_remind_job(m, remind_at)
+                        continue
+            # 提醒时刻已过 / 已提醒过 / 已开赛：直接安排轮询（提前 5 分钟生效）
+            await self._add_poll_job(m)
+
+    # ---- 每场轮询：每分钟一次（开赛前 5 分钟开始生效） ----
+    async def poll_match(self, mid: str = None) -> None:
+        if not self._subs or not mid:
+            return
+        if self._poll_lock.locked():
+            logger.info("poll_match: 上一次执行未完成，跳过本轮")
+            return
+        async with self._poll_lock:
+            cached = self._state.get("today") or {}
+            if cached.get("date") != datetime.now().strftime("%Y-%m-%d"):
+                return  # 缓存过期（跨天），等 daily 刷新
+            m = next((x for x in cached.get("matches", []) if x.get("mid") == mid), None)
+            if not m or m.get("finished"):
+                await self._remove_job_by_name(f"{JOB_POLL_PREFIX}{mid}")
+                return
+            now = datetime.now()
+            kickoff = self._kickoff_local(m, now.strftime("%Y-%m-%d"))
+            if kickoff and now < kickoff - timedelta(minutes=POLL_LEAD_MINUTES):
+                return  # 未到轮询开始时间（提前 5 分钟）
+            data = await self._mcp("get_live_scores")
+            if data is None:
+                return  # 获取失败；空列表表示无进行中比赛，继续完场检查
+            live_match = None
+            for country in data:
+                for lg in country.get("leagues", []):
+                    for mm in lg.get("matches", []):
+                        if str(mm.get("id", "")) == mid:
+                            live_match = mm
+                            break
+                    if live_match:
+                        break
+                if live_match:
+                    break
+            subs = [s for s in self._subs if s["name"] in m.get("subs", [])]
+            if live_match:
+                await self._process_live_match(live_match, subs, m.get("league", ""))
+            else:
+                await self._check_finish(m)
+
+    async def _check_finish(self, m: dict) -> bool:
+        """比赛不在直播列表时确认是否已结束（含加时 AET / 点球 PEN）。结束则推送并清理任务。"""
+        mid = m["mid"]
+        detail = await self._mcp("get_match", id=mid, h2h=0)
+        if not detail:
+            return False
+        status = str(detail.get("status") or "")
+        if status not in FINISH_STATUS and status not in ("ABD", "POST", "CANC"):
+            return False  # 仍在进行（数据延迟）或未开赛，继续等
+        # 正式结束 / 中断 / 延期 / 取消
+        st = self._state.get(mid)
+        if status in FINISH_STATUS:
+            if st and not st.get("pushed_finish") and self.config.get("push_finish", True):
                 st["pushed_finish"] = True
-                self._save_json(self.state_file, self._state)
-                if not self.config.get("push_finish", True):
-                    continue
-                subs = self._watched_subs(detail, {})
+                subs = [s for s in self._subs if s["name"] in m.get("subs", [])]
                 if subs:
-                    league = detail.get("leaguename") or ""
-                    score = detail.get("scoretime") or ""
+                    score = detail.get("scoretime") or st.get("score") or ""
+                    zh = {"FT": "全场结束", "AET": "加时赛结束", "PEN": "点球大战结束"}.get(status, "比赛结束")
                     await self._push(
-                        f"🏁 [{league}] {detail.get('localteam','')} {score} {detail.get('visitorteam','')} 全场结束",
+                        f"🏁 [{m.get('league','')}] {m.get('local','')} {score} {m.get('visitor','')} {zh}",
                         subs,
                     )
+        elif st and not st.get("pushed_finish"):
+            st["pushed_finish"] = True
+            subs = [s for s in self._subs if s["name"] in m.get("subs", [])]
+            if subs:
+                zh = {"ABD": "比赛中断", "POST": "比赛延期", "CANC": "比赛取消"}.get(status, "比赛未进行")
+                await self._push(f"⚠️ [{m.get('league','')}] {m.get('local','')} vs {m.get('visitor','')} {zh}", subs)
+        m["finished"] = True
+        if st:
+            self._state.pop(mid, None)
+        self._save_json(self.state_file, self._state)
+        await self._remove_job_by_name(f"{JOB_POLL_PREFIX}{mid}")
+        await self._remove_job_by_name(f"{JOB_REMIND_PREFIX}{mid}")
+        return True
 
-    async def _process_live_match(self, m: dict, lg: dict, subs: list[dict]) -> None:
+    async def _process_live_match(self, m: dict, subs: list[dict], league: str = "") -> None:
         mid = str(m["id"])
         score = str(m.get("scoretime") or "")
         status = str(m.get("status") or "")
         is_live = status.isdigit()  # 数字 = 比赛进行中（分钟数）
-        league = lg.get("leaguename") or m.get("leaguename") or ""
+        league = league or m.get("leaguename") or ""
         local, visitor = m.get("localteam", ""), m.get("visitorteam", "")
         st = self._state.get(mid)
 
@@ -308,69 +464,123 @@ class LiveScorePush(Star):
     async def daily_schedule(self) -> None:
         if not self._subs:
             return
-        today = datetime.now().strftime("%d/%m/%Y")
-        data = await self._mcp("get_day_fixtures", date=today, language="en", tzoffset=480)
-        if not data:
+        logger.info("daily_schedule: 开始拉取今日赛程")
+        data = await self._refresh_today_cache()
+        if data is None:
+            logger.info("daily_schedule: 未获取到赛程数据（MCP 无返回）")
             return
-        lines, hit_subs = [], set()
+        matches = self._state.get("today", {}).get("matches", [])
+        if not matches:
+            await self._push("📅 今日订阅球队暂无比赛", self._subs)
+            return
+        lines = []
+        today_key = datetime.now().strftime("%Y-%m-%d")
+        for m in matches:
+            if m.get("finished"):
+                lines.append(f"· [{m['league']}] {m['local']} vs {m['visitor']}（已结束）")
+            elif m.get("kickoff"):
+                ko = self._kickoff_local(m, today_key)
+                t = ko.strftime("%H:%M") if ko else m["kickoff"]
+                lines.append(f"· {t} [{m['league']}] {m['local']} vs {m['visitor']}")
+            elif m.get("status"):
+                lines.append(f"· [{m['league']}] {m['local']} vs {m['visitor']}（{STATUS_ZH.get(m['status'], m['status'])}）")
+        if lines:
+            await self._push("📅 今日关注赛程：\n" + "\n".join(lines[:25]), self._subs)
+        # 动态调度：每场未开赛比赛 → 一次性开赛提醒；已开赛 → 轮询任务
+        await self._schedule_today_tasks()
+
+    def _tz_offset_minutes(self) -> int:
+        """时区修正（分钟）：MCP 返回 UTC 时间，按配置的小时数偏移到本地。"""
+        try:
+            v = self.config.get("tz_offset")
+            if v is None:
+                v = 8
+            return int(v) * 60
+        except Exception:
+            return 8 * 60
+
+    def _kickoff_local(self, m: dict, today_key: str):
+        """解析开球时间（本地）：MCP 的 status HH:MM 为 UTC，按配置时区偏移。返回 datetime 或 None。"""
+        ko = m.get("kickoff") or ""
+        if not ko:
+            return None
+        try:
+            kickoff = datetime.strptime(f"{today_key} {ko}", "%Y-%m-%d %H:%M")
+            kickoff += timedelta(minutes=self._tz_offset_minutes())
+            return kickoff
+        except Exception:
+            return None
+
+    def _collect_today_matches(self, data: list) -> list[dict]:
+        """从 get_day_fixtures 结果中提取订阅球队的比赛（含命中球队名，供精确推送）。"""
+        out = []
         for country in data:
             for lg in country.get("leagues", []):
                 for m in lg.get("matches", []):
                     subs = self._watched_subs(m, lg)
                     if not subs:
                         continue
-                    hit_subs.update(id(s) for s in subs)
-                    t = m.get("time") or ""
                     status = str(m.get("status") or "")
-                    if re.fullmatch(r"\d{1,2}:\d{2}", status):
-                        lines.append(f"· {t} {m['localteam']} vs {m['visitorteam']}")
-                    elif status:
-                        lines.append(f"· {t} {m['localteam']} {m.get('scoretime','')} {m['visitorteam']}（{STATUS_ZH.get(status, status)}）")
-        if lines:
-            text = "📅 今日关注赛程：\n" + "\n".join(lines[:25])
-            await self._push(text, [s for s in self._subs if id(s) in hit_subs])
+                    out.append({
+                        "mid": str(m.get("id", "")),
+                        "league": lg.get("leaguename") or m.get("leaguename") or "",
+                        "league_key": m.get("leagueKey") or lg.get("key") or "",
+                        "local": m.get("localteam", ""),
+                        "visitor": m.get("visitorteam", ""),
+                        "kickoff": status if re.fullmatch(r"\d{1,2}:\d{2}", status) else "",
+                        "status": status,
+                        "subs": [s["name"] for s in subs],
+                    })
+        return out
 
-    # ---- 开赛前提醒（每 5 分钟） ----
-    async def remind_check(self) -> None:
+    async def _refresh_today_cache(self) -> list | None:
+        """拉取今日赛程并缓存到 state["today"]，返回原始数据（失败返回 None）。"""
+        today = datetime.now().strftime("%d/%m/%Y")
+        data = await self._mcp(
+            "get_day_fixtures", date=today, language="en", tzoffset=self._tz_offset_minutes()
+        )
+        if not data:
+            return None
+        self._state["today"] = {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "matches": self._collect_today_matches(data),
+        }
+        self._save_json(self.state_file, self._state)
+        return data
+
+    # ---- 开赛提醒（一次性任务，按比赛触发） ----
+    async def remind_check(self, mid: str = None) -> None:
         mins = int(self.config.get("remind_minutes", 0) or 0)
-        if mins <= 0 or not self._subs:
+        if mins <= 0 or not self._subs or not mid:
             return
         now = datetime.now()
-        today = now.strftime("%d/%m/%Y")
-        data = await self._mcp("get_day_fixtures", date=today, language="en", tzoffset=480)
-        if not data:
+        today_key = now.strftime("%Y-%m-%d")
+        cached = self._state.get("today") or {}
+        if cached.get("date") != today_key:
+            # 缓存过期/缺失（如插件重载后）：补拉一次今日赛程
+            await self._refresh_today_cache()
+            cached = self._state.get("today") or {}
+        m = next((x for x in cached.get("matches", []) if x.get("mid") == mid), None)
+        if not m or m.get("finished") or m.get("remind_done"):
             return
-        changed = False
-        for country in data:
-            for lg in country.get("leagues", []):
-                for m in lg.get("matches", []):
-                    status = str(m.get("status") or "")
-                    if not re.fullmatch(r"\d{1,2}:\d{2}", status):
-                        continue  # 未开赛的比赛 status 为开赛时间
-                    try:
-                        kickoff = datetime.strptime(
-                            f"{now.strftime('%Y-%m-%d')} {status}", "%Y-%m-%d %H:%M"
-                        )
-                    except Exception:
-                        continue
-                    delta = (kickoff - now).total_seconds() / 60
-                    if not (0 < delta <= mins):
-                        continue
-                    mid = str(m.get("id", ""))
-                    key = f"remind_{mid}"
-                    if self._state.get(key):
-                        continue
-                    subs = self._watched_subs(m, lg)
-                    if subs:
-                        self._state[key] = True
-                        changed = True
-                        await self._push(
-                            f"⏰ [{lg.get('leaguename','')}] {m['localteam']} vs {m['visitorteam']} "
-                            f"{status} 开球，约 {int(delta)} 分钟后！",
-                            subs,
-                        )
-        if changed:
-            self._save_json(self.state_file, self._state)
+        kickoff = self._kickoff_local(m, today_key)
+        if kickoff is None:
+            return
+        delta = (kickoff - now).total_seconds() / 60
+        if not (0 < delta <= mins + 2):
+            # 任务延迟到开球后：不再提醒，直接进入轮询阶段
+            await self._add_poll_job(m)
+            return
+        m["remind_done"] = True
+        self._save_json(self.state_file, self._state)
+        subs = [s for s in self._subs if s["name"] in m.get("subs", [])]
+        await self._push(
+            f"⏰ [{m['league']}] {m['local']} vs {m['visitor']} "
+            f"{kickoff.strftime('%H:%M')} 开球，约 {int(delta)} 分钟后！",
+            subs,
+        )
+        # 提醒后为该比赛注册轮询任务（开赛前 5 分钟开始生效）
+        await self._add_poll_job(m)
 
     # ==================== 指令 ====================
 
@@ -388,9 +598,9 @@ class LiveScorePush(Star):
 
         if action in ("订阅", "sub", "subscribe"):
             if not rest:
-                yield event.plain_result("用法：/球 订阅 <联赛名>，如：/球 订阅 英超")
+                yield event.plain_result("用法：/球 订阅 <球队名>，如：/球 订阅 曼城")
                 return
-            yield event.plain_result(self._add_sub("league", rest, session))
+            yield event.plain_result(self._add_sub("team", rest, session))
         elif action in ("关注", "follow"):
             if not rest:
                 yield event.plain_result("用法：/球 关注 <球队名>，如：/球 关注 曼城")
@@ -455,7 +665,9 @@ class LiveScorePush(Star):
         stype = str(body.get("type") or "").strip()
         if not session or not name:
             return {"ok": False, "message": "缺少参数：session / name"}
-        if stype not in ("league", "team"):
+        if stype == "league":
+            stype = "team"  # 兼容旧参数，统一按球队处理
+        if stype != "team":
             return {"ok": False, "message": "type 必须是 league 或 team"}
         msg = self._add_sub(stype, name, session)
         ok = not msg.startswith(("订阅失败", "失败"))
@@ -488,20 +700,15 @@ class LiveScorePush(Star):
     # ---- 订阅管理 ----
     def _add_sub(self, stype: str, name: str, session: str) -> str:
         name = name.strip()
-        if stype == "league":
-            kws = self._expand_name(name)
-            if not kws:
-                return "订阅失败：无效的联赛名称"
         for s in self._subs:
             if s["type"] == stype and s["name"] == name:
                 if session not in s["sessions"]:
                     s["sessions"].append(session)
                     self._save_json(self.subs_file, self._subs)
-                return f"已订阅「{name}」（本会话已加入推送）"
+                return f"已关注「{name}」（本会话已加入推送）"
         self._subs.append({"type": stype, "name": name, "sessions": [session]})
         self._save_json(self.subs_file, self._subs)
-        tip = "联赛" if stype == "league" else "球队"
-        return f"✅ 已{('订阅' if stype=='league' else '关注')}「{name}」{tip}，有比赛时将推送至此会话"
+        return f"✅ 已关注「{name}」球队，有比赛时将推送至此会话"
 
     def _remove_sub(self, kw: str, session: str) -> str:
         kw = kw.lower()
@@ -526,7 +733,7 @@ class LiveScorePush(Star):
             return "暂无订阅。用 /球 订阅 英超 或 /球 关注 曼城 开始吧"
         lines = []
         for i, s in enumerate(self._subs, 1):
-            tag = "联赛" if s["type"] == "league" else "球队"
+            tag = "球队"
             lines.append(f"{i}. [{tag}] {s['name']}（{len(s['sessions'])} 个会话）")
         return "📋 当前订阅：\n" + "\n".join(lines)
 
@@ -553,10 +760,13 @@ class LiveScorePush(Star):
 
     async def _query_today(self) -> str:
         today = datetime.now().strftime("%d/%m/%Y")
-        data = await self._mcp("get_day_fixtures", date=today, language="en", tzoffset=480)
+        data = await self._mcp(
+            "get_day_fixtures", date=today, language="en", tzoffset=self._tz_offset_minutes()
+        )
         if not data:
             return "无法获取今日赛程"
         lines = []
+        tz_min = self._tz_offset_minutes()
         for country in data:
             for lg in country.get("leagues", []):
                 for m in lg.get("matches", []):
@@ -564,12 +774,13 @@ class LiveScorePush(Star):
                     if not subs:
                         continue
                     mark = "★"
-                    t = m.get("time") or ""
                     status = str(m.get("status") or "")
                     if re.fullmatch(r"\d{1,2}:\d{2}", status):
-                        lines.append(f"{mark} {t} {m['localteam']} vs {m['visitorteam']}")
+                        # MCP 时间按 UTC，修正到本地显示
+                        t = datetime.strptime(f"{today} {status}", "%d/%m/%Y %H:%M") + timedelta(minutes=tz_min)
+                        lines.append(f"{mark} {t.strftime('%H:%M')} {m['localteam']} vs {m['visitorteam']}")
                     elif status:
-                        lines.append(f"{mark} {t} {m['localteam']} {m.get('scoretime','')} {m['visitorteam']}（{STATUS_ZH.get(status, status)}）")
+                        lines.append(f"{mark} {m['localteam']} {m.get('scoretime','')} {m['visitorteam']}（{STATUS_ZH.get(status, status)}）")
         if not lines:
             return "今日没有订阅相关的比赛"
         return "📅 今日关注赛程（★=已订阅）：\n" + "\n".join(lines[:25])
@@ -578,12 +789,12 @@ class LiveScorePush(Star):
     def _usage() -> str:
         return (
             "⚽ 足球比分推送（基于 Live-Score MCP）\n"
-            "/球 订阅 <联赛> —— 订阅联赛，如：/球 订阅 英超\n"
-            "/球 关注 <球队> —— 关注球队，如：/球 关注 曼城\n"
-            "/球 取消 <关键词> —— 取消订阅\n"
-            "/球 列表 —— 查看订阅\n"
+            "/球 关注 <球队> —— 关注球队，如：/球 关注 曼城（每日 8 点推送赛程，赛前 15 分钟提醒）\n"
+            "/球 订阅 <球队> —— 同上（兼容写法）\n"
+            "/球 取消 <关键词> —— 取消关注\n"
+            "/球 列表 —— 查看关注\n"
             "/球 现在 —— 查看进行中的关注比赛\n"
             "/球 今日 —— 查看今日关注赛程\n"
             "/球 帮助 —— 本帮助\n"
-            "推送功能：进球 ⚽ / 开赛 🔔 / 完场 🏁 / 红牌 🟥 / 每日赛程 📅 / 开赛提醒 ⏰"
+            "推送功能：进球 ⚽ / 开赛 🔔 / 完场 🏁 / 红牌 🟥 / 每日赛程 📅 / 赛前提醒 ⏰"
         )

@@ -1,4 +1,10 @@
 {
+  "tz_offset": {
+    "type": "int",
+    "description": "时区修正（小时）：MCP 返回 UTC 时间，修正到本地时区",
+    "hint": "北京时间填 8。若推送/赛程显示的时间与本地相差 N 小时，填入对应偏移",
+    "default": 8
+  },
   "push_goal": {
     "type": "bool",
     "description": "进球时推送",
@@ -22,7 +28,7 @@
   "remind_minutes": {
     "type": "int",
     "description": "开赛前提醒分钟数（0 为关闭）",
-    "hint": "例如填 30，表示关注比赛开赛前 30 分钟推送提醒",
-    "default": 0
+    "hint": "默认 15：daily 发现关注比赛后，在开赛前 15 分钟自动创建一次性提醒任务",
+    "default": 15
   }
 }

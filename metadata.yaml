@@ -1,21 +1,21 @@
 name: astrbot_plugin_livescore_push
 display_name: 足球比分推送
-short_desc: 基于 Live-Score MCP 的足球比赛实时推送：订阅联赛/球队，进球开赛完场即时通知
+short_desc: 基于 Live-Score MCP 的足球比赛实时推送：关注球队，每日赛程/开赛提醒/进球开赛完场即时通知（动态任务调度）
 desc: |
   基于已启用的 Live-Score MCP 服务（livescoremcp.com）实现的足球比赛推送插件。
-  支持按联赛或球队订阅，自动轮询实时比分，进球⚽、开赛🔔、红牌🟥、完场🏁即时推送到订阅会话；
-  每日 8 点推送当日关注赛程，可配置开赛前提醒。所有数据来自 Live-Score MCP，无需额外 API Key。
+  支持关注球队，每天 8 点推送当日赛程、开赛前 15 分钟提醒，比赛开始后每分钟轮询，
+  进球⚽、开赛🔔、红牌🟥、完场🏁即时推送到关注会话。所有数据来自 Live-Score MCP，无需额外 API Key。
 help: |
-  /球 订阅 英超   —— 订阅联赛（支持 英超/西甲/德甲/意甲/法甲/欧冠 等中文名）
-  /球 关注 曼城   —— 关注球队
-  /球 取消 英超   —— 取消订阅
-  /球 列表        —— 查看当前订阅
+  /球 关注 曼城   —— 关注球队（模糊匹配队名）
+  /球 订阅 曼城   —— 同上（兼容写法）
+  /球 取消 曼城   —— 取消关注
+  /球 列表        —— 查看当前关注
   /球 现在        —— 查看进行中的关注比赛
   /球 今日        —— 查看今日关注赛程
   /球 帮助        —— 查看帮助
 version: v1.0.0
 author: Branwen
-repo: https://github.com/Branwen07/astrbot_plugin_livescore_push
+repo: https://github.com/
 astrbot_version: ">=4.16,<5"
 support_platforms:
   - aiocqhttp

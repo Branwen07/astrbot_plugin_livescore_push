@@ -89,6 +89,166 @@ TEAM_ALIASES = {
 # 正式结束状态（含加时赛 AET、点球大战 PEN）
 FINISH_STATUS = {"FT", "AET", "PEN"}
 
+# 英文队名 → 中文（推送内容中文化，官方英文名来自 Live-Score MCP）
+TEAM_CN = {
+    # 中超 2026
+    "Beijing Guoan": "北京国安",
+    "Chengdu Rongcheng": "成都蓉城",
+    "Chongqing Tongliang Long": "重庆铜梁龙",
+    "Dalian Zhixing": "大连英博",
+    "Henan": "河南队",
+    "Liaoning Shenyang Urban": "辽宁铁人",
+    "Qingdao Hainiu": "青岛海牛",
+    "Qingdao West Coast": "青岛西海岸",
+    "Shandong Taishan": "山东泰山",
+    "Shanghai Port": "上海海港",
+    "Shanghai Shenhua": "上海申花",
+    "Sichuan Jiuniu": "四川九牛",
+    "Tianjin Jinmen Tiger": "天津津门虎",
+    "Wuhan Three Towns": "武汉三镇",
+    "Yunnan Yukun": "云南玉昆",
+    "Zhejiang": "浙江队",
+    # 主流豪门
+    "Manchester City": "曼城",
+    "Man City": "曼城",
+    "Manchester United": "曼联",
+    "Man United": "曼联",
+    "Liverpool": "利物浦",
+    "Arsenal": "阿森纳",
+    "Chelsea": "切尔西",
+    "Tottenham": "热刺",
+    "Tottenham Hotspur": "热刺",
+    "Real Madrid": "皇家马德里",
+    "Barcelona": "巴塞罗那",
+    "Bayern Munich": "拜仁慕尼黑",
+    "Borussia Dortmund": "多特蒙德",
+    "Paris Saint Germain": "巴黎圣日耳曼",
+    "PSG": "巴黎圣日耳曼",
+    "Juventus": "尤文图斯",
+    "Inter": "国际米兰",
+    "Inter Milan": "国际米兰",
+    "AC Milan": "AC米兰",
+    "Atletico Madrid": "马德里竞技",
+    "Napoli": "那不勒斯",
+    "Roma": "罗马",
+    "Benfica": "本菲卡",
+    "Porto": "波尔图",
+    "Ajax": "阿贾克斯",
+    "Feyenoord": "费耶诺德",
+    "PSV": "埃因霍温",
+    "Celtic": "凯尔特人",
+    "Rangers": "流浪者",
+    "Urawa Red Diamonds": "浦和红钻",
+    "Yokohama F. Marinos": "横滨水手",
+    "Kawasaki Frontale": "川崎前锋",
+    "Jeonbuk": "全北现代",
+    "Jeonbuk Hyundai Motors": "全北现代",
+    "Ulsan": "蔚山现代",
+    "Ulsan Hyundai": "蔚山现代",
+    "Al Nassr": "利雅得胜利",
+    "Al Hilal": "利雅得新月",
+    "Inter Miami": "迈阿密国际",
+    # 荷甲 / 荷乙 / 友谊赛常见对手
+    "Volendam": "福伦丹",
+    "AZ Alkmaar": "阿尔克马尔",
+    "FC Utrecht": "乌德勒支",
+    "FC Twente": "特温特",
+    "PSV Eindhoven": "埃因霍温",
+    "SC Heerenveen": "海伦芬",
+    "Vitesse": "维特斯",
+    "FC Groningen": "格罗宁根",
+    "NEC Nijmegen": "奈梅亨",
+    "Sparta Rotterdam": "鹿特丹斯巴达",
+    "Go Ahead Eagles": "前进之鹰",
+    "PEC Zwolle": "兹沃勒",
+    "Heracles Almelo": "赫拉克勒斯",
+    "RKC Waalwijk": "瓦尔韦克",
+    "Almere City": "阿尔梅勒城",
+    "FC Emmen": "埃门",
+    "NAC Breda": "布雷达",
+    "Willem II": "威廉二世",
+    "Fortuna Sittard": "锡塔德幸运",
+    "ADO Den Haag": "海牙",
+    "Excelsior": "精英",
+    "Cambuur": "坎布尔",
+    "Roda JC": "罗达JC",
+    "FC Dordrecht": "多德雷赫特",
+    "VVV-Venlo": "芬洛",
+    "FC Eindhoven": "埃因霍温FC",
+    "Telstar": "特尔斯达",
+    "MVV Maastricht": "马斯特里赫特",
+    "FC Den Bosch": "登博斯",
+    "Helmond Sport": "赫尔蒙德",
+    "TOP Oss": "奥斯",
+    "De Graafschap": "格拉夫夏普",
+    "Jong Ajax": "阿贾克斯青年队",
+    "Jong PSV": "埃因霍温青年队",
+    "Jong AZ": "阿尔克马尔青年队",
+}
+
+# 队名前缀/后缀剥离规则（归一化匹配用，如 "FC Volendam" → "Volendam"）
+_TEAM_NAME_PREFIXES = (
+    "fc ", "afc ", "sc ", "sv ", "fk ", "ss ", "cf ", "cd ", "ac ", "as ",
+    "rc ", "rs ", "sk ", "bk ", "tsv ", "vfl ", "sbv ", "deportivo ",
+    "atletico ", "athletic ", "club ", "royal ",
+)
+_TEAM_NAME_SUFFIXES = (" fc", " afc", " sc", " cf", " fk", " sk", " sv")
+
+
+def _norm_team_name(name: str) -> str:
+    """剥离常见俱乐部前后缀，返回小写规范化名（如 FC Volendam → volendam）。"""
+    n = (name or "").strip().lower()
+    for p in _TEAM_NAME_PREFIXES:
+        if n.startswith(p):
+            n = n[len(p):]
+            break
+    for sfx in _TEAM_NAME_SUFFIXES:
+        if n.endswith(sfx):
+            n = n[:-len(sfx)]
+            break
+    return n.strip()
+
+
+# 规范化名 → 中文（构建一次）
+NORM_TEAM_CN = {_norm_team_name(k): v for k, v in TEAM_CN.items() if _norm_team_name(k)}
+
+# 联赛名/Key → 中文
+LEAGUE_CN = {
+    "Chinese Super League": "中超", "ChinaCSL": "中超",
+    "China League One": "中甲", "ChinaLeagueOne": "中甲",
+    "China League Two": "中乙", "ChinaLeagueTwo": "中乙",
+    "Premier League": "英超",
+    "La Liga": "西甲",
+    "Serie A": "意甲",
+    "Bundesliga": "德甲",
+    "Ligue 1": "法甲",
+    "Champions League": "欧冠",
+    "Europa League": "欧联",
+    "FA Cup": "足总杯",
+    "Copa del Rey": "国王杯",
+    "Coppa Italia": "意大利杯",
+    "DFB Pokal": "德国杯",
+    "Coupe de France": "法国杯",
+    "J.League": "J联赛",
+    "K League": "K联赛",
+    # 友谊赛 / 杯赛
+    "Club Friendlies": "俱乐部友谊赛",
+    "Club Friendlies 1": "俱乐部友谊赛",
+    "ClubFriendlies": "俱乐部友谊赛",
+    "ClubFriendlies1": "俱乐部友谊赛",
+    "Club Friendlies 2": "俱乐部友谊赛",
+    "ClubFriendlies 2": "俱乐部友谊赛",
+    "International Club Friendlies": "国际俱乐部友谊赛",
+    "International Friendly": "国际友谊赛",
+    "InternationalFriendly": "国际友谊赛",
+    "Int. Friendly": "国际友谊赛",
+    "Int Friendly": "国际友谊赛",
+    "Friendlies": "友谊赛",
+    "FA Cup (China)": "足协杯",
+    "Super Cup": "超级杯",
+    "Community Shield": "社区盾",
+}
+
 # 动态任务命名（按比赛 ID 区分）
 JOB_DAILY = "livescore_daily"
 JOB_REMIND_PREFIX = "livescore_remind_"
@@ -203,6 +363,43 @@ class LiveScorePush(Star):
                     continue
         return None
 
+    # ==================== 中文显示 ====================
+
+    def _zh(self) -> bool:
+        """是否开启中文推送（默认开）。"""
+        try:
+            return bool(self.config.get("push_chinese", True))
+        except Exception:
+            return True
+
+    def _team_cn(self, name_en: str) -> str:
+        """英文队名 → 中文：精确匹配 → 剥离前后缀归一化匹配 → 长关键词词边界兜底。"""
+        if not self._zh() or not name_en:
+            return name_en or ""
+        if name_en in TEAM_CN:
+            return TEAM_CN[name_en]
+        norm = _norm_team_name(name_en)
+        if norm and norm in NORM_TEAM_CN:
+            return NORM_TEAM_CN[norm]
+        # 长关键词（≥6 字符）词边界子串匹配，覆盖 FC Volendam II 这类变体
+        for k in sorted(NORM_TEAM_CN, key=len, reverse=True):
+            if len(k) < 6:
+                continue
+            if re.search(rf"\b{re.escape(k)}\b", name_en, re.IGNORECASE):
+                return NORM_TEAM_CN[k]
+        return name_en
+
+    def _league_cn(self, league: str, key: str = "") -> str:
+        """联赛名/Key → 中文：精确 → 长关键词子串（如 Club Friendlies → 俱乐部友谊赛）。"""
+        if not self._zh():
+            return league or ""
+        for k in sorted(LEAGUE_CN, key=len, reverse=True):
+            if not k:
+                continue
+            if k == key or k == league or (len(k) >= 4 and league and k in league):
+                return LEAGUE_CN[k]
+        return league or ""
+
     # ==================== 订阅匹配 ====================
 
     def _team_hit(self, match: dict, sub_name: str) -> bool:
@@ -288,22 +485,32 @@ class LiveScorePush(Star):
         except Exception as e:
             logger.warning(f"删除任务 {name} 失败: {e}")
 
-    async def _add_remind_job(self, m: dict, remind_at) -> None:
-        """注册一次性开赛提醒任务（到点执行后自动删除）。"""
+    async def _add_remind_job(self, m: dict, remind_at, kickoff=None) -> None:
+        """注册一次性开赛提醒任务（到点执行后自动删除）。
+
+        description 中写明推送时间，便于可视化面板查看；
+        先以 enabled=False 创建再启用，避免占位 cron 产生"每天 0 点"的幽灵任务。
+        """
         mid = m.get("mid", "")
         name = f"{JOB_REMIND_PREFIX}{mid}"
         if await self._job_exists(name):
             return
         cm = self.context.cron_manager
+        local, visitor = self._team_cn(m.get("local", "")), self._team_cn(m.get("visitor", ""))
+        t_push = remind_at.strftime("%m-%d %H:%M")
+        t_ko = kickoff.strftime("%H:%M") if kickoff else "?"
         job = await cm.add_basic_job(
             name=name,
-            cron_expression="0 0 * * *",  # 占位，随后改为一次性触发
+            cron_expression=remind_at.isoformat(),
             handler=self.remind_check,
             payload={"mid": mid},
-            description=f"开赛提醒 {m.get('local')} vs {m.get('visitor')}",
+            description=f"开赛提醒：{local} vs {visitor}（{t_ko} 开球，{t_push} 推送）",
             persistent=False,
+            enabled=False,
         )
-        await cm.update_job(job.job_id, run_once=True, cron_expression=remind_at.isoformat())
+        await cm.update_job(
+            job.job_id, enabled=True, run_once=True, cron_expression=remind_at.isoformat()
+        )
 
     async def _add_poll_job(self, m: dict) -> None:
         """注册每分钟轮询任务（开赛前 POLL_LEAD_MINUTES 分钟开始生效，完场后删除）。"""
@@ -312,12 +519,13 @@ class LiveScorePush(Star):
         if await self._job_exists(name):
             return
         cm = self.context.cron_manager
+        local, visitor = self._team_cn(m.get("local", "")), self._team_cn(m.get("visitor", ""))
         await cm.add_basic_job(
             name=name,
             cron_expression="*/1 * * * *",
             handler=self.poll_match,
             payload={"mid": mid},
-            description=f"比赛轮询推送 {m.get('local')} vs {m.get('visitor')}",
+            description=f"比赛轮询：{local} vs {visitor}（每分钟，完场自动移除）",
             persistent=False,
         )
 
@@ -337,7 +545,7 @@ class LiveScorePush(Star):
                 if mins > 0:
                     remind_at = kickoff - timedelta(minutes=mins)
                     if remind_at > now:
-                        await self._add_remind_job(m, remind_at)
+                        await self._add_remind_job(m, remind_at, kickoff)
                         continue
             # 提醒时刻已过 / 已提醒过 / 已开赛：直接安排轮询（提前 5 分钟生效）
             await self._add_poll_job(m)
@@ -392,6 +600,8 @@ class LiveScorePush(Star):
             return False  # 仍在进行（数据延迟）或未开赛，继续等
         # 正式结束 / 中断 / 延期 / 取消
         st = self._state.get(mid)
+        league = self._league_cn(m.get("league", ""), m.get("league_key", ""))
+        local, visitor = self._team_cn(m.get("local", "")), self._team_cn(m.get("visitor", ""))
         if status in FINISH_STATUS:
             if st and not st.get("pushed_finish") and self.config.get("push_finish", True):
                 st["pushed_finish"] = True
@@ -400,7 +610,7 @@ class LiveScorePush(Star):
                     score = detail.get("scoretime") or st.get("score") or ""
                     zh = {"FT": "全场结束", "AET": "加时赛结束", "PEN": "点球大战结束"}.get(status, "比赛结束")
                     await self._push(
-                        f"🏁 [{m.get('league','')}] {m.get('local','')} {score} {m.get('visitor','')} {zh}",
+                        f"🏁 [{league}] {local} {score} {visitor} {zh}",
                         subs,
                     )
         elif st and not st.get("pushed_finish"):
@@ -408,7 +618,7 @@ class LiveScorePush(Star):
             subs = [s for s in self._subs if s["name"] in m.get("subs", [])]
             if subs:
                 zh = {"ABD": "比赛中断", "POST": "比赛延期", "CANC": "比赛取消"}.get(status, "比赛未进行")
-                await self._push(f"⚠️ [{m.get('league','')}] {m.get('local','')} vs {m.get('visitor','')} {zh}", subs)
+                await self._push(f"⚠️ [{league}] {local} vs {visitor} {zh}", subs)
         m["finished"] = True
         if st:
             self._state.pop(mid, None)
@@ -422,8 +632,8 @@ class LiveScorePush(Star):
         score = str(m.get("scoretime") or "")
         status = str(m.get("status") or "")
         is_live = status.isdigit()  # 数字 = 比赛进行中（分钟数）
-        league = league or m.get("leaguename") or ""
-        local, visitor = m.get("localteam", ""), m.get("visitorteam", "")
+        league = self._league_cn(league or m.get("leaguename") or "", m.get("leagueKey") or "")
+        local, visitor = self._team_cn(m.get("localteam", "")), self._team_cn(m.get("visitorteam", ""))
         st = self._state.get(mid)
 
         if st is None:
@@ -476,14 +686,16 @@ class LiveScorePush(Star):
         lines = []
         today_key = datetime.now().strftime("%Y-%m-%d")
         for m in matches:
+            league = self._league_cn(m["league"], m.get("league_key", ""))
+            local, visitor = self._team_cn(m["local"]), self._team_cn(m["visitor"])
             if m.get("finished"):
-                lines.append(f"· [{m['league']}] {m['local']} vs {m['visitor']}（已结束）")
+                lines.append(f"· [{league}] {local} vs {visitor}（已结束）")
             elif m.get("kickoff"):
                 ko = self._kickoff_local(m, today_key)
                 t = ko.strftime("%H:%M") if ko else m["kickoff"]
-                lines.append(f"· {t} [{m['league']}] {m['local']} vs {m['visitor']}")
+                lines.append(f"· {t} [{league}] {local} vs {visitor}")
             elif m.get("status"):
-                lines.append(f"· [{m['league']}] {m['local']} vs {m['visitor']}（{STATUS_ZH.get(m['status'], m['status'])}）")
+                lines.append(f"· [{league}] {local} vs {visitor}（{STATUS_ZH.get(m['status'], m['status'])}）")
         if lines:
             await self._push("📅 今日关注赛程：\n" + "\n".join(lines[:25]), self._subs)
         # 动态调度：每场未开赛比赛 → 一次性开赛提醒；已开赛 → 轮询任务
@@ -574,8 +786,10 @@ class LiveScorePush(Star):
         m["remind_done"] = True
         self._save_json(self.state_file, self._state)
         subs = [s for s in self._subs if s["name"] in m.get("subs", [])]
+        league = self._league_cn(m["league"], m.get("league_key", ""))
+        local, visitor = self._team_cn(m["local"]), self._team_cn(m["visitor"])
         await self._push(
-            f"⏰ [{m['league']}] {m['local']} vs {m['visitor']} "
+            f"⏰ [{league}] {local} vs {visitor} "
             f"{kickoff.strftime('%H:%M')} 开球，约 {int(delta)} 分钟后！",
             subs,
         )
@@ -751,8 +965,13 @@ class LiveScorePush(Star):
                     status = str(m.get("status") or "")
                     if status.isdigit():
                         status = f"{status}'"
+                    league = self._league_cn(
+                        lg.get("leaguename") or m.get("leaguename") or "",
+                        m.get("leagueKey") or lg.get("key") or "",
+                    )
+                    local, visitor = self._team_cn(m["localteam"]), self._team_cn(m["visitorteam"])
                     lines.append(
-                        f"{mark} [{lg.get('leaguename','')}] {m['localteam']} {m.get('scoretime','')} {m['visitorteam']}（{status}）"
+                        f"{mark} [{league}] {local} {m.get('scoretime','')} {visitor}（{status}）"
                     )
         if not lines:
             return "当前没有进行中的比赛"
@@ -775,12 +994,17 @@ class LiveScorePush(Star):
                         continue
                     mark = "★"
                     status = str(m.get("status") or "")
+                    league = self._league_cn(
+                        lg.get("leaguename") or m.get("leaguename") or "",
+                        m.get("leagueKey") or lg.get("key") or "",
+                    )
+                    local, visitor = self._team_cn(m["localteam"]), self._team_cn(m["visitorteam"])
                     if re.fullmatch(r"\d{1,2}:\d{2}", status):
                         # MCP 时间按 UTC，修正到本地显示
                         t = datetime.strptime(f"{today} {status}", "%d/%m/%Y %H:%M") + timedelta(minutes=tz_min)
-                        lines.append(f"{mark} {t.strftime('%H:%M')} {m['localteam']} vs {m['visitorteam']}")
+                        lines.append(f"{mark} {t.strftime('%H:%M')} [{league}] {local} vs {visitor}")
                     elif status:
-                        lines.append(f"{mark} {m['localteam']} {m.get('scoretime','')} {m['visitorteam']}（{STATUS_ZH.get(status, status)}）")
+                        lines.append(f"{mark} [{league}] {local} {m.get('scoretime','')} {visitor}（{STATUS_ZH.get(status, status)}）")
         if not lines:
             return "今日没有订阅相关的比赛"
         return "📅 今日关注赛程（★=已订阅）：\n" + "\n".join(lines[:25])

@@ -36,6 +36,9 @@
 
 ## ⚙️ 配置（面板中可调）
 
+- `push_chinese`：推送内容中文化（队名/联赛名），默认开
+  - 匹配机制：精确匹配 → 剥离 FC/AFC/SC 等前后缀归一化匹配 → 长关键词词边界兜底（如 `FC Volendam` → 福伦丹、`AFC Ajax` → 阿贾克斯）
+  - 联赛名同样支持子串匹配（如 `Club Friendlies` → 俱乐部友谊赛）；未收录的队名/联赛保持原文
 - `tz_offset`：时区修正（小时），MCP 返回 UTC 时间，默认 8（北京时间）
 - `daily_schedule`：每日 8 点赛程推送，默认开
 - `remind_minutes`：开赛前提醒分钟数，默认 15，0=关闭
@@ -54,7 +57,7 @@
 - **动态任务链**（AstrBot 内置 `cron_manager.add_basic_job()`，支持 payload 传参、一次性任务自动删除）：
   - `livescore_daily`（唯一固定任务，每天 8:00）：查询今日赛程 → 缓存到 state → 推送
   - 发现关注比赛后，为每场未开赛比赛动态创建**一次性** `livescore_remind_<比赛ID>`（开赛前 `remind_minutes` 分钟触发，执行后自动删除）
-  - `livescore_remind_*` 触发时：推送开赛提醒 → 为该比赛创建 `livescore_poll_<比赛ID>`（每分钟轮询）
+  - `livescore_remind_*` 触发时：推送开赛提醒 → 为该比赛创建 `livescore_poll_<比赛ID>`（每分钟轮询）；任务描述中写明开球时间与推送时间，可在面板「定时任务」页查看
   - `livescore_poll_*`：开赛前 5 分钟开始生效，推送开赛 🔔 / 进球 ⚽ / 红牌 🟥，比赛**正式结束（含加时 AET、点球 PEN）**后推送完场 🏁 并删除自身任务
   - 插件重载后自动从 state 缓存恢复动态任务
 - **去重**：以 `get_match` 返回的 events[].id 为唯一键，进球/红牌只推一次

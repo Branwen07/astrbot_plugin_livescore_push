@@ -5,6 +5,12 @@
     "hint": "北京时间填 8。若推送/赛程显示的时间与本地相差 N 小时，填入对应偏移",
     "default": 8
   },
+  "push_chinese": {
+    "type": "bool",
+    "description": "推送内容使用中文（队名/联赛名自动翻译）",
+    "hint": "开启后推送显示中文队名与联赛名，如：上海申花 vs 辽宁铁人（中超）",
+    "default": true
+  },
   "push_goal": {
     "type": "bool",
     "description": "进球时推送",
@@ -28,7 +34,7 @@
   "remind_minutes": {
     "type": "int",
     "description": "开赛前提醒分钟数（0 为关闭）",
-    "hint": "默认 15：daily 发现关注比赛后，在开赛前 15 分钟自动创建一次性提醒任务",
+    "hint": "默认 15：在开赛前 15 分钟自动创建一次性提醒任务；每个比赛的提醒时间可在面板「定时任务」页查看（任务名 livescore_remind_*）",
     "default": 15
   }
 }

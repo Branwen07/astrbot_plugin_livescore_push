@@ -114,7 +114,7 @@
   <div class="head">
     <div>
       <h1>订阅总览</h1>
-      <div class="sub">各对话订阅的联赛 / 球队推送 · 可在此直接添加与取消</div>
+      <div class="sub">各对话关注的球队推送 · 可在此直接添加与取消</div>
     </div>
   </div>
 
@@ -130,7 +130,7 @@
   <script src="/api/plugin/page/bridge-sdk.js"></script>
   <script>
     (function () {
-      var TYPE_ZH = { league: "联赛", team: "球队" };
+      var TYPE_ZH = { team: "球队" };
       var listEl = document.getElementById("list");
       var metaEl = document.getElementById("meta");
       var toastEl = document.getElementById("toast");
@@ -242,11 +242,11 @@
               '</div><div class="s-id">' + esc(sid) + "</div>" +
               '<div class="items">' + items + "</div>" +
               '<div class="addform" id="form-' + esc(sid) + '">' +
-              '<select><option value="league">联赛</option><option value="team">球队</option></select>' +
-              '<input placeholder="如：英超 / 拜仁慕尼黑" maxlength="40">' +
+              '<select style="display:none"><option value="team">球队</option></select>' +
+              '<input placeholder="如：拜仁慕尼黑" maxlength="40">' +
               '<button class="btn btn-primary" data-act="ok">添加</button>' +
               '<button class="btn" data-act="cancel">取消</button>' +
-              '<div class="add-hint">球队名称需与推送消息一致；联赛支持中文别名（英超、西甲、欧冠…）</div>' +
+              '<div class="add-hint">球队名称需与推送消息一致，支持中文名（如：拜仁慕尼黑）或英文名</div>' +
               "</div></div>";
           });
         }
